@@ -210,13 +210,32 @@ const maskC=document.createElement('canvas'), mctx=maskC.getContext('2d');
 let maskReady=false;
 
 async function startCamera(){
-  if(stream){stream.getTracks().forEach(t=>t.stop());}
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:S.facing},width:{ideal:1280},height:{ideal:1280}}});
-  }catch(e){
-    toast('مقدرناش نفتح الكاميرا. اسمح للمتصفح بالكاميرا وافتح الصفحة من لينك https',6000);throw e;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(!window.isSecureContext||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast('المتصفح ده مش بيسمح بالكاميرا. افتح اللينك في Chrome أو Safari مش من جوه تطبيق تاني',9000);throw new Error('no mediaDevices');
   }
-  video.srcObject=stream; await video.play();
+  const tries=[
+    {audio:false,video:{facingMode:{ideal:S.facing},width:{ideal:1280},height:{ideal:720}}},
+    {audio:false,video:{facingMode:S.facing}},
+    {audio:false,video:true}
+  ];
+  let last=null;
+  for(const c of tries){
+    try{stream=await navigator.mediaDevices.getUserMedia(c);break;}
+    catch(e){last=e;console.warn('camera try failed',c,e);if(e.name==='NotAllowedError'||e.name==='SecurityError')break;}
+  }
+  if(!stream){
+    const n=last&&last.name||'';
+    const msg={
+      NotAllowedError:'الكاميرا مرفوضة. دوس على العلامة اللي جنب اللينك فوق ← الأذونات ← الكاميرا ← سماح، وبعدين Refresh. ولو فيه فقاعة أو برنامج فوق الشاشة اقفله.',
+      SecurityError:'الكاميرا مرفوضة لأسباب أمان. افتح اللينك في Chrome مباشرة.',
+      NotReadableError:'الكاميرا مشغولة مع برنامج تاني. اقفل الكاميرا والواتساب وأي برنامج بيستخدمها وجرّب تاني.',
+      NotFoundError:'مش لاقيين كاميرا في الجهاز ده.',
+      OverconstrainedError:'الكاميرا مش قابلة الإعدادات. جرّب زرار قلب الكاميرا.'
+    }[n]||('مقدرناش نفتح الكاميرا: '+(n||'')+' '+(last&&last.message||''));
+    toast(msg,12000);throw last||new Error('camera');
+  }
+  video.srcObject=stream; await video.play().catch(()=>{});
   if(S.facing==='user' && !store.get('mirrorSet',false)){S.mirror=true;}
 }
 async function loadSegmenter(){
